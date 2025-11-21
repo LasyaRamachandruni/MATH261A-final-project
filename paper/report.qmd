@@ -1,0 +1,102 @@
+---
+title: "Predicting Irrigation Diversions in California"
+subtitle: "Final Project — MATH261A"
+author: "Swathi Sri Lasya Mayukha Ramachandruni"
+format:
+  html: default
+  pdf: default
+execute:
+  echo: false
+  warning: false
+  message: false
+toc: true
+toc-depth: 2
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(readr)
+library(dplyr)
+library(knitr)
+library(ggplot2)
+options(digits = 6)
+```
+
+## Research Question
+Which geographic, legal, and irrigation-use factors best predict  
+(a) **annual diverted volume** and  
+(b) **irrigation intensity** (AF/acre) reported by California water right holders?
+
+## Data
+Two public datasets were joined on APPLICATION / PERMIT / LICENSE / CERTIFICATE IDs:
+
+- **Points of Diversion (POD) List** — location, right type/status, face values  
+- **Irrigation Use Annual Reports** — year, crops, acres irrigated, face value  
+
+Observational unit: **water-right × year** record with linked POD attributes.
+
+## Models
+We estimate four OLS models and focus on log variants due to heavy skew:
+
+- **Log Volume**  
+  `log(FACE_VALUE_AMOUNT) ~ log(TOTAL_ACRES_IRRIGATED) + LATITUDE + LONGITUDE + WATER_RIGHT_TYPE.x + COUNTY.x`
+
+- **Log Intensity**  
+  `log(FACE_VALUE_AMOUNT / TOTAL_ACRES_IRRIGATED) ~ LATITUDE + LONGITUDE + WATER_RIGHT_TYPE.x + COUNTY.x`
+
+HC1 robust SEs used; counties entered as fixed effects.
+
+---
+
+## Results (summary)
+
+- **Fit (Adj. R²):** Log Volume ≈ 0.808; Log Intensity ≈ 0.786.  
+- **5-fold CV (log scale):**  
+  - Log Volume RMSE ≈ 0.00143; MAE ≈ 0.00036  
+  - Log Intensity RMSE ≈ 0.00268; MAE ≈ 0.00069  
+- **Key signals:** Larger irrigated area (log) and location terms explain diverted volume; right type and county effects are material.  
+- **Diagnostics:** BP test shows heteroskedasticity → robust SEs used; VIFs inspected (see tables).
+
+---
+
+## Tables & Figures
+
+```{r}
+#| label: results
+# Files were generated earlier by your analysis scripts (Step 12).
+cv      <- read_csv("tables/cv_results.csv",              show_col_types = FALSE)
+rob     <- read_csv("tables/model_coefficients_robustHC.csv", show_col_types = FALSE)
+vif_vol <- read_csv("tables/vif_log_volume.csv",          show_col_types = FALSE)
+vif_int <- read_csv("tables/vif_log_intensity.csv",       show_col_types = FALSE)
+
+knitr::kable(cv, digits = 6, caption = "Cross-validation results (log scale)")
+
+rob %>%
+  dplyr::filter(term != "(Intercept)") %>%
+  dplyr::group_by(Model) %>%
+  dplyr::arrange(dplyr::desc(abs(statistic)), .by_group = TRUE) %>%
+  dplyr::slice_head(n = 10) %>%
+  dplyr::select(Model, term, estimate, std.error, statistic, p.value) %>%
+  knitr::kable(digits = 5, caption = "Top 10 coefficients by |t|-statistic (HC1 robust)")
+
+knitr::kable(vif_vol, digits = 3, caption = "Variance Inflation Factors — Log Volume model")
+knitr::kable(vif_int, digits = 3, caption = "Variance Inflation Factors — Log Intensity model")
+```
+
+![Diagnostics — Log Volume](figures/diag_log_volume.png){width=80%}
+
+![Diagnostics — Log Intensity](figures/diag_log_intensity.png){width=80%}
+
+---
+
+## Limitations
+Missingness (acres, coordinates) and many-to-many joins can introduce noise. 
+Intensity model excludes zero-acre cases. County fixed effects may absorb spatial gradients.
+
+---
+
+## Next Steps
+- Try interaction: `log(acres) × right type`  
+- Compare county FE vs. spatial smoothers  
+- Out-of-time validation by report year
